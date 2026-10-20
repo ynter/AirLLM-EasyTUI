@@ -44,10 +44,10 @@ AirLLM-EasyTUI 是一个基于 Python 和 PyTorch 的智能 CLI 工具，专注�
 
 ```bash
 # 4bit 压缩模式
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
 
 # 本地模型路径
-python3 airllm_easy_tui.py --model ./my_local_model --compression 8bit
+airllm-easy-tui --model ./my_local_model --compression 8bit
 ```
 
 ### 🧩 插件系统
@@ -181,7 +181,7 @@ python-dateutil>=2.8.0
 
 ```bash
 # 启动 LLM CLI
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
 ```
 
 启动后会进入交互式 CLI 界面：
@@ -215,19 +215,19 @@ Device: cuda
 
 ```bash
 # 使用 8bit 压缩
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-7B-Instruct --compression 8bit
+airllm-easy-tui --model Qwen/Qwen2.5-7B-Instruct --compression 8bit
 
 # 本地模型 + 缓存目录
-python3 airllm_easy_tui.py --model ./models/my-model --compression 4bit --shards-path ./my_cache
+airllm-easy-tui --model ./models/my-model --compression 4bit --shards-path ./my_cache
 
 # CPU 模式
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --no-gpu
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --no-gpu
 
 # 启动 API 服务
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --api-port 8000
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --api-port 8000
 
 # 禁用特定插件
-python3 airllm_easy_tui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --disable-plugin chat_logger
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit --disable-plugin chat_logger
 ```
 
 ---
@@ -455,6 +455,16 @@ def setup(self, args):
 
 ## 📦 安装说明
 
+### 从 PyPI 安装（推荐）
+
+```bash
+# 安装包
+pip install airllm-easy-tui
+
+# 运行
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
+```
+
 ### 从源码安装
 
 ```bash
@@ -466,27 +476,16 @@ cd AirLLM-EasyTUI
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 安装依赖
-pip install -r requirements.txt
+# 安装开发依赖
+pip install -e ".[dev]"
 
 # 运行
-python3 start_airllm_ui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
+airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
 ```
 
-### 使用 Docker（可选）
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-CMD ["python3", "start_airllm_ui.py", "--model", "Qwen/Qwen2.5-3B-Instruct", "--compression", "4bit"]
-```
+**开发安装说明：**
+- `pip install airllm-easy-tui` - 安装生产版本
+- `pip install -e ".[dev]"` - 以可编辑模式安装（开发模式），支持代码修改实时生效
 
 ---
 
