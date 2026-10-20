@@ -1,0 +1,18 @@
+# AirLLM-EasyTUI 依赖项
+
+# 深度学习框架
+torch>=2.0.0
+airllm>=1.0.0
+transformers>=4.30.0
+
+# 系统监控
+psutil>=5.9.0
+pynvml>=11.0.0
+
+# API 服务
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+
+# 其他工具
+python-dateutil>=2.8.0
