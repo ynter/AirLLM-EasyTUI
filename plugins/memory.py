@@ -36,6 +36,7 @@ class MemoryPlugin(AirLLMPlugin):
         "forget": "删除记忆：/forget <id>",
         "memory-help": "显示记忆命令帮助",
     }
+    command_aliases = {"mem": "memories"}
 
     # 注入到 system prompt 时最多占多少字符（防止挤爆上下文）
     MAX_PINNED_CHARS = 600

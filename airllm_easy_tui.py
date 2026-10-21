@@ -2,16 +2,18 @@
 """AirLLM CLI —— 带插件系统。"""
 
 import argparse
+import ctypes
 import hashlib
 import os
 import re
+import sys
 import warnings
 
 warnings.filterwarnings("ignore", message=".*pynvml.*", category=FutureWarning)
 
 import torch
 
-from plugin_api import AppContext, GenerateContext
+from plugin_api import BUILTIN_COMMAND_ALIASES, AppContext, GenerateContext
 from plugin_loader import discover
 
 
@@ -22,6 +24,69 @@ DEFAULT_COMPRESSION = "4bit"
 DEFAULT_SHARDS_PATH = "./airllm_shards"
 
 PROMPT_PREFIX = "你是一个严谨的助手。请只基于确凿的事实回答。如果不确定，请直接回答‘我不知道’，不要猜测或编造。"
+
+_COLOR_ENABLED = False
+_COLORS = {
+    "cyan": "\033[36m",
+    "blue": "\033[34m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "red": "\033[31m",
+    "dim": "\033[2m",
+    "bold": "\033[1m",
+}
+_RESET = "\033[0m"
+
+
+def _setup_terminal_colors() -> bool:
+    if "NO_COLOR" in os.environ or os.environ.get("TERM", "").lower() == "dumb":
+        return False
+    if not sys.stdout.isatty():
+        return False
+    if os.name == "nt":
+        try:
+            kernel32 = ctypes.windll.kernel32
+            get_std_handle = kernel32.GetStdHandle
+            get_std_handle.argtypes = [ctypes.c_uint32]
+            get_std_handle.restype = ctypes.c_void_p
+            handle = get_std_handle(ctypes.c_uint32(-11).value)
+            mode = ctypes.c_uint32()
+            get_console_mode = kernel32.GetConsoleMode
+            get_console_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+            get_console_mode.restype = ctypes.c_int
+            if not get_console_mode(handle, ctypes.byref(mode)):
+                return False
+            set_console_mode = kernel32.SetConsoleMode
+            set_console_mode.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            set_console_mode.restype = ctypes.c_int
+            if not set_console_mode(handle, mode.value | 0x0004):
+                return False
+        except (AttributeError, OSError):
+            return False
+    return True
+
+
+def _paint(text: str, color: str) -> str:
+    if not _COLOR_ENABLED or color not in _COLORS:
+        return text
+    return f"{_COLORS[color]}{text}{_RESET}"
+
+
+def _print_startup_banner(args, device: str) -> None:
+    rule = "━" * 54
+    print(_paint(rule, "cyan"))
+    print(_paint("  AirLLM-EasyTUI", "bold"))
+    print(f"  模型       {_paint(args.model, 'cyan')}")
+    print(f"  压缩 / 设备  {_paint(args.compression, 'green')}  ·  {device}")
+    print(f"  上下文     {args.max_length} tokens  ·  生成上限 {args.max_new_tokens} tokens")
+    print(_paint(rule, "cyan"))
+    print(f"  输入 {_paint('/help', 'yellow')} 查看命令，输入 {_paint('quit', 'yellow')} 退出")
+    print()
+
+
+def _print_help(plugins) -> None:
+    print(_paint("可用命令", "bold"))
+    print(plugins.describe_commands())
 
 
 # ---------------------------------------------------------------------------
@@ -117,19 +182,19 @@ def load_model(args):
     # 关键：回写实际路径，供 cache_layer_monitor 统计当前模型的缓存大小
     args._actual_shards_path = shards_path
 
-    print(f"[*] 正在加载模型: {args.model}")
-    print(f"[*] 压缩方式: {args.compression}")
-    print(f"[*] 最大上下文: {args.max_length} tokens")
-    print(f"[*] 缓存根目录: {args.shards_path}")
-    print(f"[*] 分层缓存路径: {shards_path}")
-    print("[*] 首次加载会进行分层切分，可能需要 30-60 分钟，请耐心等待...")
+    print(_paint("[模型] 开始加载", "blue"))
+    print(f"  模型       {args.model}")
+    print(f"  压缩方式   {args.compression}")
+    print(f"  最大上下文 {args.max_length} tokens")
+    print(f"  缓存目录   {shards_path}")
+    print(_paint("  首次加载可能需要较长时间，请耐心等待。", "dim"))
 
     kwargs = {"compression": compression, "layer_shards_saving_path": shards_path}
     if args.no_gpu:
         kwargs["device"] = "cpu"
 
     model = AutoModel.from_pretrained(args.model, **kwargs)
-    print("[*] 模型加载完成。\n")
+    print(_paint("[模型] 加载完成\n", "green"))
     return model
 
 
@@ -142,8 +207,12 @@ def _dispatch_command(plugins, user_input, app):
     if not text:
         return False
     if text.startswith("/"):
-        cmd, _, arg = text[1:].partition(" ")
-        return plugins.handle_command(cmd.lower(), arg.strip(), app)
+        parts = text[1:].split(maxsplit=1)
+        cmd = parts[0].lower() if parts else ""
+        arg = parts[1].strip() if len(parts) > 1 else ""
+        if cmd in plugins.all_command_names() or f"/{cmd}" in plugins.all_command_names():
+            return plugins.handle_command(cmd, arg, app)
+        return False
     low = text.lower()
     if low in plugins.all_command_names():
         return plugins.handle_command(low, "", app)
@@ -198,35 +267,43 @@ def chat(model, args, plugins):
                      device=device, plugins=plugins)
     plugins.call("on_startup", app)
 
-    print("=" * 55)
-    print("  AirLLM CLI 已启动")
-    print("  输入 'quit' / 'exit' 退出；'/help' 查看命令")
-    print("=" * 55)
-    print(f"[*] 推理设备: {device}")
-    print(f"[*] 输入上限: {args.max_length} | 生成上限: {args.max_new_tokens}")
-    print()
+    _print_startup_banner(args, device)
 
     while True:
         plugins.call("on_before_input")
         try:
-            user_input = input("你 > ").strip()
+            user_input = input(
+                f"{_paint('你', 'green')} "
+                f"{_paint('(输入 /help 查看命令)', 'dim')} > "
+            ).strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n再见！")
+            print(f"\n{_paint('会话已结束。', 'dim')}")
             break
         finally:
             plugins.call("on_after_input")
 
         if not user_input:
             continue
-        if user_input.lower() in ("quit", "exit", "q"):
-            print("再见！")
+        command_text = user_input.lstrip("/").split(maxsplit=1)[0].lower()
+        builtin = BUILTIN_COMMAND_ALIASES.get(command_text)
+        if builtin == "quit" and (
+            user_input.startswith("/") or user_input.lower() in ("quit", "exit", "q")
+        ):
+            print(_paint("会话已结束。", "dim"))
             break
-        if user_input.lower() in ("/help", "help"):
-            print(plugins.describe())
-            print("内建命令: quit / exit / q / help")
+        if builtin == "help" and (
+            user_input.startswith("/") or user_input.lower() == "help"
+        ):
+            _print_help(plugins)
             continue
 
         if _dispatch_command(plugins, user_input, app):
+            continue
+        if user_input.startswith("/"):
+            print(_paint(
+                f"[命令] 未知命令: {user_input.split(maxsplit=1)[0]}。输入 /help 查看可用命令。",
+                "yellow",
+            ))
             continue
         
         gen = GenerateContext(user_text=user_input, system_prompt=PROMPT_PREFIX)
@@ -239,6 +316,7 @@ def chat(model, args, plugins):
         gen.input_ids = input_ids
         gen.attention_mask = attention_mask
 
+        print(_paint("AI 正在思考…", "dim"))
         try:
             with torch.no_grad():
                 output = model.generate(
@@ -257,11 +335,11 @@ def chat(model, args, plugins):
                     **gen.extra_kwargs,
                 )
         except torch.cuda.OutOfMemoryError:
-            print("[!] 显存不足。请尝试降低 --max-length。")
+            print(_paint("[错误] 显存不足，请尝试降低 --max-length。", "red"))
             torch.cuda.empty_cache()
             continue
         except Exception as e:
-            print(f"[!] 推理出错: {type(e).__name__}: {e}")
+            print(_paint(f"[错误] 推理失败: {type(e).__name__}: {e}", "red"))
             continue
 
         output_ids = output.sequences[0]
@@ -273,11 +351,14 @@ def chat(model, args, plugins):
         gen.response = tokenizer.decode(new_ids, skip_special_tokens=True)
 
         plugins.call("on_after_generate", gen)
-        print(f"AI > {gen.response}\n")
+        print(f"{_paint('AI', 'blue')} > {gen.response}\n")
 
         if gen.new_tokens >= args.max_new_tokens:
             if len(new_ids) > 0 and int(new_ids[-1]) != eos_token_id:
-                print(f"[!] 回答达到 --max-new-tokens={args.max_new_tokens}，可能截断。\n")
+                print(_paint(
+                    f"[提示] 回答达到 --max-new-tokens={args.max_new_tokens}，可能已截断。\n",
+                    "yellow",
+                ))
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +366,15 @@ def chat(model, args, plugins):
 # ---------------------------------------------------------------------------
 
 def main():
+    global _COLOR_ENABLED
+    _COLOR_ENABLED = _setup_terminal_colors()
+
     args = parse_args()
     if not torch.cuda.is_available() and not args.no_gpu:
-        print("[!] 警告: 未检测到 CUDA，将回退到 CPU 推理。")
+        print(_paint("[警告] 未检测到 CUDA，将回退到 CPU 推理。", "yellow"))
 
     plugins = discover(args=args, disabled=args.disable_plugin)
+    print(_paint("已加载插件", "bold"))
     print(plugins.describe())
     print()
 

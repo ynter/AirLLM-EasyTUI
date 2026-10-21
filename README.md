@@ -128,12 +128,17 @@ python3 start_airllm_ui.py --model Qwen/Qwen2.5-3B-Instruct --compression 4bit -
 ```bash
 # 主命令
 /help          # 显示所有可用命令
+/h 或 /?       # /help 快捷别名
+/q 或 /exit    # 退出对话（/quit 也可）
 /stats         # 查看资源占用
 /progress      # 查看推理进度
 /memories      # 列出所有记忆
+/mem           # /memories 快捷别名
 /log           # 显示日志文件路径
 /api           # 管理 API 服务
 ```
+
+输入 `/` 开头的未知命令时，CLI 会提示命令不存在并引导查看 `/help`，不会把它作为普通聊天内容发送给模型。
 
 ---
 
@@ -187,14 +192,20 @@ airllm-easy-tui --model Qwen/Qwen2.5-3B-Instruct --compression 4bit
 启动后会进入交互式 CLI 界面：
 
 ```
-Welcome to AirLLM-EasyTUI! 🚀
-Model: Qwen/Qwen2.5-3B-Instruct (4bit)
-Device: cuda
---------------------------------------------------
-> 你好，请介绍一下你自己。
-> 你好！我是基于 Qwen2.5-3B-Instruct 模型的 AI 助手...
---------------------------------------------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  AirLLM-EasyTUI
+  模型       Qwen/Qwen2.5-3B-Instruct
+  压缩 / 设备  4bit  ·  cuda
+  上下文     128 tokens  ·  生成上限 512 tokens
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  输入 /help 查看命令，输入 quit 退出
+
+你 > 你好，请介绍一下你自己。
+AI 正在思考…
+AI > 你好！我是基于 Qwen2.5-3B-Instruct 模型的 AI 助手...
 ```
+
+交互界面会在支持 ANSI 颜色的终端中显示彩色提示；设置 `NO_COLOR` 环境变量可关闭颜色。
 
 ### 常用参数
 

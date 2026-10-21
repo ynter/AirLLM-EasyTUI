@@ -5,11 +5,30 @@ import inspect
 import pkgutil
 from pathlib import Path
 
-from plugin_api import AirLLMPlugin, PluginManager
+from plugin_api import AirLLMPlugin, BUILTIN_COMMAND_ALIASES, PluginManager
+
+
+class DiscoverPluginManager(PluginManager):
+    """发现插件后，返回命令名的用户可见形式：同时支持 /cmd 和 cmd。"""
+
+    def all_command_names(self):
+        names = set()
+        for alias in BUILTIN_COMMAND_ALIASES:
+            names.update({alias, f"/{alias}"})
+        for p in self.plugins:
+            for name in p.commands.keys():
+                normalized = name.strip().lower().lstrip("/")
+                if normalized:
+                    names.update({normalized, f"/{normalized}"})
+            for alias in getattr(p, "command_aliases", {}):
+                normalized = alias.strip().lower().lstrip("/")
+                if normalized:
+                    names.update({normalized, f"/{normalized}"})
+        return names
 
 
 def discover(package: str = "plugins", args=None, disabled=None) -> PluginManager:
-    manager = PluginManager()
+    manager = DiscoverPluginManager()
     disabled = set(disabled or [])
     base = Path(__file__).resolve().parent / package
 
